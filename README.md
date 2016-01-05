@@ -1,2 +1,2 @@
-# Pintrest-OAuth-Client
-A sample Oauth client using Pintrest
+# Pinterest-OAuth-Client
+A sample Oauth client using Pinterest
