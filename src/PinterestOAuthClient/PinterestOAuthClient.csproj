@@ -45,18 +45,11 @@
     <Reference Include="Telligent.DynamicConfiguration">
       <HintPath>..\..\..\..\Evolution\Trunk\Assemblies\Telligent.DynamicConfiguration.dll</HintPath>
     </Reference>
-    <Reference Include="Telligent.Evolution.Api">
-      <HintPath>..\..\..\..\Evolution\Trunk\Assemblies\Telligent.Evolution.Api.dll</HintPath>
-    </Reference>
     <Reference Include="Telligent.Evolution.Components">
       <HintPath>..\..\..\..\Evolution\Trunk\Assemblies\Telligent.Evolution.Components.dll</HintPath>
     </Reference>
     <Reference Include="Telligent.Evolution.Controls">
       <HintPath>..\..\..\..\Evolution\Trunk\Assemblies\Telligent.Evolution.Controls.dll</HintPath>
-    </Reference>
-    <Reference Include="Telligent.Evolution.Core, Version=9.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\..\..\Evolution\Trunk\Assemblies\Telligent.Evolution.Core.dll</HintPath>
     </Reference>
   </ItemGroup>
   <ItemGroup>

@@ -1,12 +1,9 @@
 ﻿using System;
-using System.Collections.Specialized;
 using System.IO;
 using System.Net;
 using System.Web;
 using System.Web.Script.Serialization;
-using Telligent.Common;
 using Telligent.DynamicConfiguration.Components;
-using Telligent.Evolution.Components;
 using Telligent.Evolution.Extensibility.Authentication.Version1;
 using Telligent.Evolution.Extensibility.Version1;
 using OAuthData = Telligent.Evolution.Extensibility.Authentication.Version1.OAuthData;
@@ -15,17 +12,6 @@ namespace Telligent.Evolution.OAuth
 {
     public class PinterestOAuthClient : IOAuthClient, IRequiredConfigurationPlugin
     {
-		private readonly IPluginManager _pluginManager;
-
-        public PinterestOAuthClient()
-            : this(Services.Get<IPluginManager>())
-		{
-		}
-
-        public PinterestOAuthClient(IPluginManager pluginManager)
-		{
-			_pluginManager = pluginManager;
-		}
 
         #region IPlugin
 
@@ -104,10 +90,8 @@ namespace Telligent.Evolution.OAuth
             get { return ""; }
         }
 
-        public bool Enabled
-        {
-            get { return _pluginManager.IsEnabled(this); }
-        }
+        // Does nothing, potentially will be removed in a future release
+        public bool Enabled { get { return true; } }
 
         private string _callbackUrl;
         public virtual string CallbackUrl
@@ -136,10 +120,10 @@ namespace Telligent.Evolution.OAuth
         //  authorize the user and return back to Telligent Evolution.
         public string GetAuthorizationLink()
         {
-            return string.Format("{0}/?client_id={1}&redirect_uri={2}&response_type=code&scope=read_public", 
-                AuthorizeBaseUrl, 
-                ConsumerKey, 
-                Globals.UrlEncode(CallbackUrl));
+            return string.Format("{0}/?client_id={1}&redirect_uri={2}&response_type=code&scope=read_public",
+                AuthorizeBaseUrl,
+                ConsumerKey,
+                HttpUtility.UrlEncode(CallbackUrl));
         }
 
         // This method is called when the user is redirected to
@@ -169,30 +153,30 @@ namespace Telligent.Evolution.OAuth
 
         private void FailedLogin()
         {
-            throw new CSException(CSExceptionType.OAuthLoginFailed);
+            throw new ApplicationException("OAuth Login Failed");
         }
 
-		public string RemoveVerificationCodeFromUri(HttpContextBase context)
+        public string RemoveVerificationCodeFromUri(HttpContextBase context)
         {
             string uri = context.Request.Url.AbsoluteUri;
-			int startIndex = uri.LastIndexOf("code=");
-			if (startIndex < 0)
-				return uri;
+            int startIndex = uri.LastIndexOf("code=");
+            if (startIndex < 0)
+                return uri;
 
-			int codeLength = uri.Substring(startIndex).IndexOf("&");
-			if (codeLength < 0)
-				codeLength = uri.Length - startIndex;
+            int codeLength = uri.Substring(startIndex).IndexOf("&");
+            if (codeLength < 0)
+                codeLength = uri.Length - startIndex;
 
-			if (uri.Length == startIndex + codeLength)
-			{
-				startIndex--;
-			}
-			codeLength++;
+            if (uri.Length == startIndex + codeLength)
+            {
+                startIndex--;
+            }
+            codeLength++;
 
 
-			// Remove the verification code param
-			return uri.Remove(startIndex, codeLength);
-		}
+            // Remove the verification code param
+            return uri.Remove(startIndex, codeLength);
+        }
 
         /// <summary>
         /// Gets the access token for the security parameters.  Context will only have AccessToken and Expires values set.
@@ -228,7 +212,7 @@ namespace Telligent.Evolution.OAuth
             }
             catch (Exception ex)
             {
-                throw new CSException(CSExceptionType.OAuthWebRequestFailure, ex.Message, ex);
+                throw new ApplicationException("OAuth Web Request Failed", ex);
             }
 
             if (responseData.Length > 0)
@@ -262,7 +246,7 @@ namespace Telligent.Evolution.OAuth
             }
             catch (Exception ex)
             {
-                throw new CSException(CSExceptionType.OAuthWebRequestFailure, ex.Message, ex);
+                throw new ApplicationException("OAuth Web Request Failed", ex);
             }
 
             if (responseData.Length > 0)
@@ -271,12 +255,12 @@ namespace Telligent.Evolution.OAuth
                 PinterestUserDetails userDetails = new JavaScriptSerializer().Deserialize<PinterestUserDetails>(responseData);
 
                 var data = new OAuthData
-                    {
-                        ClientId = userDetails.data.id, 
-                        ClientType = ClientType, 
-                        UserName = string.Format("{0}{1}", userDetails.data.first_name, userDetails.data.last_name), 
-                        CommonName = string.Format("{0} {1}", userDetails.data.first_name, userDetails.data.last_name)
-                    };
+                {
+                    ClientId = userDetails.data.id,
+                    ClientType = ClientType,
+                    UserName = string.Format("{0}{1}", userDetails.data.first_name, userDetails.data.last_name),
+                    CommonName = string.Format("{0} {1}", userDetails.data.first_name, userDetails.data.last_name)
+                };
 
                 return data;
             }
