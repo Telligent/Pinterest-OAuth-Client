@@ -120,9 +120,9 @@ namespace Telligent.Evolution.OAuth
         //  authorize the user and return back to Telligent Evolution.
         public string GetAuthorizationLink()
         {
-            return string.Format("{0}/?client_id={1}&redirect_uri={2}&response_type=code&scope=read_public",
-                AuthorizeBaseUrl,
-                ConsumerKey,
+            return string.Format("{0}/?client_id={1}&redirect_uri={2}&response_type=code&scope=read_public", 
+                AuthorizeBaseUrl, 
+                ConsumerKey, 
                 HttpUtility.UrlEncode(CallbackUrl));
         }
 
@@ -156,27 +156,27 @@ namespace Telligent.Evolution.OAuth
             throw new ApplicationException("OAuth Login Failed");
         }
 
-        public string RemoveVerificationCodeFromUri(HttpContextBase context)
+		public string RemoveVerificationCodeFromUri(HttpContextBase context)
         {
             string uri = context.Request.Url.AbsoluteUri;
-            int startIndex = uri.LastIndexOf("code=");
-            if (startIndex < 0)
-                return uri;
+			int startIndex = uri.LastIndexOf("code=");
+			if (startIndex < 0)
+				return uri;
 
-            int codeLength = uri.Substring(startIndex).IndexOf("&");
-            if (codeLength < 0)
-                codeLength = uri.Length - startIndex;
+			int codeLength = uri.Substring(startIndex).IndexOf("&");
+			if (codeLength < 0)
+				codeLength = uri.Length - startIndex;
 
-            if (uri.Length == startIndex + codeLength)
-            {
-                startIndex--;
-            }
-            codeLength++;
+			if (uri.Length == startIndex + codeLength)
+			{
+				startIndex--;
+			}
+			codeLength++;
 
 
-            // Remove the verification code param
-            return uri.Remove(startIndex, codeLength);
-        }
+			// Remove the verification code param
+			return uri.Remove(startIndex, codeLength);
+		}
 
         /// <summary>
         /// Gets the access token for the security parameters.  Context will only have AccessToken and Expires values set.
@@ -188,27 +188,12 @@ namespace Telligent.Evolution.OAuth
             string postData = string.Format("grant_type=authorization_code&client_id={0}&client_secret={1}&code={2}",
                                         ConsumerKey, ConsumerSecret, authorizationCode);
 
-            var webRequest = (HttpWebRequest)System.Net.WebRequest.Create(AccessTokenUrl);
-            webRequest.Method = "POST";
-            webRequest.ServicePoint.Expect100Continue = false;
-            webRequest.Timeout = 20000;
-            webRequest.ContentType = "application/x-www-form-urlencoded";
-
-            using (var requestWriter = new StreamWriter(webRequest.GetRequestStream()))
-            {
-                requestWriter.Write(postData);
-                requestWriter.Close();
-            }
-
+            var webClient = new WebClient();
             string responseData;
-
             try
             {
-                using (var responseReader = new StreamReader(webRequest.GetResponse().GetResponseStream()))
-                {
-                    responseData = responseReader.ReadToEnd();
-                    responseReader.Close();
-                }
+                webClient.Headers[HttpRequestHeader.ContentType] = "application/x-www-form-urlencoded";
+                responseData = webClient.UploadString(AccessTokenUrl, postData);
             }
             catch (Exception ex)
             {
@@ -229,20 +214,13 @@ namespace Telligent.Evolution.OAuth
         private OAuthData GetUserData(string token)
         {
             // Use Pinterest API to get details about the user
-            var webRequest = (HttpWebRequest)WebRequest.Create(string.Format("https://api.pinterest.com/v1/me?access_token={0}", token));
-            webRequest.Method = "GET";
-            webRequest.ServicePoint.Expect100Continue = false;
-            webRequest.Timeout = 20000;
+            string pinterestUrl = string.Format("https://api.pinterest.com/v1/me?access_token={0}", token);
 
+            var webClient = new WebClient();
             string responseData;
-
             try
             {
-                using (var responseReader = new StreamReader(webRequest.GetResponse().GetResponseStream()))
-                {
-                    responseData = responseReader.ReadToEnd();
-                    responseReader.Close();
-                }
+                responseData = webClient.DownloadString(pinterestUrl);
             }
             catch (Exception ex)
             {
@@ -255,12 +233,12 @@ namespace Telligent.Evolution.OAuth
                 PinterestUserDetails userDetails = new JavaScriptSerializer().Deserialize<PinterestUserDetails>(responseData);
 
                 var data = new OAuthData
-                {
-                    ClientId = userDetails.data.id,
-                    ClientType = ClientType,
-                    UserName = string.Format("{0}{1}", userDetails.data.first_name, userDetails.data.last_name),
-                    CommonName = string.Format("{0} {1}", userDetails.data.first_name, userDetails.data.last_name)
-                };
+                    {
+                        ClientId = userDetails.data.id, 
+                        ClientType = ClientType, 
+                        UserName = string.Format("{0}{1}", userDetails.data.first_name, userDetails.data.last_name), 
+                        CommonName = string.Format("{0} {1}", userDetails.data.first_name, userDetails.data.last_name)
+                    };
 
                 return data;
             }
