@@ -1,12 +1,14 @@
 ﻿using System;
-using System.IO;
 using System.Net;
 using System.Web;
 using System.Web.Script.Serialization;
 using Telligent.DynamicConfiguration.Components;
 using Telligent.Evolution.Extensibility.Authentication.Version1;
-using Telligent.Evolution.Extensibility.Version1;
+using Telligent.Evolution.Extensibility.Version2;
 using OAuthData = Telligent.Evolution.Extensibility.Authentication.Version1.OAuthData;
+using PropertyGroup = Telligent.Evolution.Extensibility.Configuration.Version1.PropertyGroup;
+using Property = Telligent.Evolution.Extensibility.Configuration.Version1.Property;
+using PropertyRule = Telligent.Evolution.Extensibility.Configuration.Version1.PropertyRule;
 
 namespace Telligent.Evolution.OAuth
 {
@@ -41,14 +43,28 @@ namespace Telligent.Evolution.OAuth
         {
             get
             {
-                var groups = new[] { new PropertyGroup("options", "Options", 0) };
+                var groups = new[] { new PropertyGroup { Id = "options", LabelText = "Options", OrderNumber = 0} };
 
-                var consumerKey = new Property("ConsumerKey", "Consumer Key", PropertyType.String, 0, "");
-                consumerKey.Rules.Add(new PropertyRule(typeof(Telligent.Evolution.Controls.PropertyRules.TrimStringRule), false));
+                var consumerKey = new Property
+				{ 
+					Id = "ConsumerKey",
+					LabelText = "Consumer Key",
+					DataType = PropertyType.String.ToString(),
+					OrderNumber = 0,
+					DefaultValue = ""
+                };
+                consumerKey.Rules.Add(new PropertyRule {Name = "trim" });
                 groups[0].Properties.Add(consumerKey);
 
-                var consumerSecret = new Property("ConsumerSecret", "Consumer Secret", PropertyType.String, 0, "");
-                consumerSecret.Rules.Add(new PropertyRule(typeof(Telligent.Evolution.Controls.PropertyRules.TrimStringRule), false));
+                var consumerSecret = new Property
+                {
+	                Id = "ConsumerSecret",
+	                LabelText = "Consumer Secret",
+	                DataType = PropertyType.String.ToString(),
+	                OrderNumber = 1,
+	                DefaultValue = ""
+                };
+                consumerSecret.Rules.Add(new PropertyRule { Name = "trim" });
                 groups[0].Properties.Add(consumerSecret);
 
                 return groups;
@@ -120,10 +136,7 @@ namespace Telligent.Evolution.OAuth
         //  authorize the user and return back to Telligent Evolution.
         public string GetAuthorizationLink()
         {
-            return string.Format("{0}/?client_id={1}&redirect_uri={2}&response_type=code&scope=read_public", 
-                AuthorizeBaseUrl, 
-                ConsumerKey, 
-                HttpUtility.UrlEncode(CallbackUrl));
+            return $"{AuthorizeBaseUrl}/?client_id={ConsumerKey}&redirect_uri={HttpUtility.UrlEncode(CallbackUrl)}&response_type=code&scope=read_public";
         }
 
         // This method is called when the user is redirected to
@@ -188,17 +201,19 @@ namespace Telligent.Evolution.OAuth
             string postData = string.Format("grant_type=authorization_code&client_id={0}&client_secret={1}&code={2}",
                                         ConsumerKey, ConsumerSecret, authorizationCode);
 
-            var webClient = new WebClient();
             string responseData;
-            try
-            {
-                webClient.Headers[HttpRequestHeader.ContentType] = "application/x-www-form-urlencoded";
-                responseData = webClient.UploadString(AccessTokenUrl, postData);
-            }
-            catch (Exception ex)
-            {
-                throw new ApplicationException("OAuth Web Request Failed", ex);
-            }
+			using (var webClient = new WebClient())
+			{
+				try
+				{
+					webClient.Headers[HttpRequestHeader.ContentType] = "application/x-www-form-urlencoded";
+					responseData = webClient.UploadString(AccessTokenUrl, postData);
+				}
+				catch (Exception ex)
+				{
+					throw new ApplicationException("OAuth Web Request Failed", ex);
+				}
+			}
 
             if (responseData.Length > 0)
             {
@@ -216,15 +231,17 @@ namespace Telligent.Evolution.OAuth
             // Use Pinterest API to get details about the user
             string pinterestUrl = string.Format("https://api.pinterest.com/v1/me?access_token={0}", token);
 
-            var webClient = new WebClient();
             string responseData;
-            try
+            using (var webClient = new WebClient())
             {
-                responseData = webClient.DownloadString(pinterestUrl);
-            }
-            catch (Exception ex)
-            {
-                throw new ApplicationException("OAuth Web Request Failed", ex);
+                try
+                {
+                    responseData = webClient.DownloadString(pinterestUrl);
+                }
+                catch (Exception ex)
+                {
+                    throw new ApplicationException("OAuth Web Request Failed", ex);
+                }
             }
 
             if (responseData.Length > 0)
