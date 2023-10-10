@@ -9,7 +9,7 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>PinterestOAuthClient</RootNamespace>
     <AssemblyName>PinterestOAuthClient</AssemblyName>
-    <TargetFrameworkVersion>v4.7</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile />
   </PropertyGroup>
@@ -40,9 +40,6 @@
     <Reference Include="Microsoft.CSharp" />
     <Reference Include="System.Data" />
     <Reference Include="System.Xml" />
-    <Reference Include="Telligent.DynamicConfiguration">
-      <HintPath>Telligent\Telligent.DynamicConfiguration.dll</HintPath>
-    </Reference>
     <Reference Include="Telligent.Evolution.Platform">
       <HintPath>Telligent\Telligent.Evolution.Platform.dll</HintPath>
     </Reference>

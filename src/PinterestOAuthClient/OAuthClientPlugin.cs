@@ -1,279 +1,184 @@
 ﻿using System;
-using System.Net;
 using System.Web;
-using System.Web.Script.Serialization;
-using Telligent.DynamicConfiguration.Components;
-using Telligent.Evolution.Extensibility.Authentication.Version1;
+using System.Threading;
+using System.Threading.Tasks;
+using Telligent.Evolution.Extensibility;
+using Telligent.Evolution.Extensibility.Api.Version1;
+using Telligent.Evolution.Extensibility.Version1;
+using Telligent.Evolution.Extensibility.Authentication.Version2;
 using Telligent.Evolution.Extensibility.Version2;
-using OAuthData = Telligent.Evolution.Extensibility.Authentication.Version1.OAuthData;
-using PropertyGroup = Telligent.Evolution.Extensibility.Configuration.Version1.PropertyGroup;
-using Property = Telligent.Evolution.Extensibility.Configuration.Version1.Property;
-using PropertyRule = Telligent.Evolution.Extensibility.Configuration.Version1.PropertyRule;
+using Telligent.Evolution.Extensibility.Configuration.Version1;
 
 namespace Telligent.Evolution.OAuth
 {
-    public class PinterestOAuthClient : IOAuthClient, IRequiredConfigurationPlugin
-    {
+	public class PinterestOAuthClient : IExternalLinkedAuthenticationProvider, IRequiredConfigurationPlugin, IConfigurablePlugin, IPlugin
+	{
+		private IHttp _http;
+		private IPluginConfiguration _configuration;
+		private IExternalLinkedAuthenticationProviderController _authController;
+		private string _redirectUri;
 
-        #region IPlugin
+		private const string CLIENT_ID = "ClientId";
+		private const string CLIENT_SECRET = "ClientSecret";
 
-        public string Name { get { return "Pinterest"; } }
-        public string Description { get { return "Provides user authentication through Pinterest."; } }
-        public void Initialize() { }
+		#region IPlugin
 
-        #endregion
-
-        #region IConfigurablePlugin
-
-        protected IPluginConfiguration Configuration
-        {
-            get;
-            private set;
-        }
-
-        public void Update(IPluginConfiguration configuration)
-        {
-            Configuration = configuration;
-        }
-
-        // The configuration options are defined here. The values provided here
-        //  are for convenience and not necessarily the values your OAuth client will
-        //  require to be configured.  These may be changed as needed.
-        public PropertyGroup[] ConfigurationOptions
-        {
-            get
-            {
-                var groups = new[] { new PropertyGroup { Id = "options", LabelText = "Options", OrderNumber = 0} };
-
-                var consumerKey = new Property
-				{ 
-					Id = "ConsumerKey",
-					LabelText = "Consumer Key",
-					DataType = PropertyType.String.ToString(),
-					OrderNumber = 0,
-					DefaultValue = ""
-                };
-                consumerKey.Rules.Add(new PropertyRule {Name = "trim" });
-                groups[0].Properties.Add(consumerKey);
-
-                var consumerSecret = new Property
-                {
-	                Id = "ConsumerSecret",
-	                LabelText = "Consumer Secret",
-	                DataType = PropertyType.String.ToString(),
-	                OrderNumber = 1,
-	                DefaultValue = ""
-                };
-                consumerSecret.Rules.Add(new PropertyRule { Name = "trim" });
-                groups[0].Properties.Add(consumerSecret);
-
-                return groups;
-            }
-        }
-
-        #endregion
-
-        #region IRequiredConfigurationPlugin Members
-
-        public bool IsConfigured
-        {
-            get { return !string.IsNullOrEmpty(ConsumerKey) && !string.IsNullOrEmpty(ConsumerSecret); }
-        }
-
-        #endregion
-
-        #region IOAuthClient Properties
-        public string ClientName { get { return "Pinterest"; } }
-        public string ClientType { get { return "pinterest"; } }
-        public virtual string AuthorizeBaseUrl { get { return "https://api.pinterest.com/oauth"; } }
-        public virtual string AccessTokenUrl { get { return "https://api.pinterest.com/v1/oauth/token"; } }
-        public virtual string ConsumerKey { get { return Configuration.GetString("ConsumerKey"); } }
-        public virtual string ConsumerSecret { get { return Configuration.GetString("ConsumerSecret"); } }
-        public string ThemeColor { get { return "BD081C"; } }
-
-        // Your privacy statement should include what privacy information
-        //  is being collected about the user using this OAuth client.
-        public string Privacy
-        {
-            get { return "Privacy statement"; }
-        }
-
-        // This is html that will be executed when a client logs out
-        //  after being logged in through this OAuth client.
-        //  Use this to perform further actions if needed.
-        public string ClientLogoutScript
-        {
-            get { return ""; }
-        }
-
-        // Does nothing, potentially will be removed in a future release
-        public bool Enabled { get { return true; } }
-
-        private string _callbackUrl;
-        public virtual string CallbackUrl
-        {
-            get
-            {
-                return _callbackUrl;
-            }
-            set
-            {
-                if (!string.IsNullOrEmpty(value) && value.StartsWith("http:"))
-                    _callbackUrl = "https" + value.Substring(4);
-                else
-                    _callbackUrl = value;
-            }
-        }
-
-        // This returns the url to an image representing your OAuth provider.
-        // The image is shown when selecting what client to use when logging in and
-        //  next to the user's avatar when logged in.
-        public virtual string FileStoreKey { get { return "oauthimages"; } }
-        public string IconUrl { get { return "https://developers.pinterest.com/static/img/badge.svg"; } }
-        #endregion
-
-        // Returns the Url to the OAuth service that will
-        //  authorize the user and return back to Telligent Evolution.
-        public string GetAuthorizationLink()
-        {
-            return $"{AuthorizeBaseUrl}/?client_id={ConsumerKey}&redirect_uri={HttpUtility.UrlEncode(CallbackUrl)}&response_type=code&scope=read_public";
-        }
-
-        // This method is called when the user is redirected to
-        //  Telligent Evolution after logging in through the OAuth service.
-        // The method must return an OAuthData object based on the user's
-        //  information provided by the service or return null.
-        public OAuthData ProcessLogin(HttpContextBase context)
-        {
-            if (!Enabled || context.Request.QueryString["error"] != null)
-                FailedLogin();
-
-            if (context.Request.QueryString["code"] == null)
-                FailedLogin();
-            string authorizationCode = context.Request.QueryString["code"];
-
-            _callbackUrl = RemoveVerificationCodeFromUri(context);
-
-            string token = GetAccessToken(authorizationCode);
-
-            if (string.IsNullOrEmpty(token))
-                FailedLogin();
-
-            return GetUserData(token);
-        }
-
-        #region Helpers
-
-        private void FailedLogin()
-        {
-            throw new ApplicationException("OAuth Login Failed");
-        }
-
-		public string RemoveVerificationCodeFromUri(HttpContextBase context)
-        {
-            string uri = context.Request.Url.AbsoluteUri;
-			int startIndex = uri.LastIndexOf("code=");
-			if (startIndex < 0)
-				return uri;
-
-			int codeLength = uri.Substring(startIndex).IndexOf("&");
-			if (codeLength < 0)
-				codeLength = uri.Length - startIndex;
-
-			if (uri.Length == startIndex + codeLength)
-			{
-				startIndex--;
-			}
-			codeLength++;
-
-
-			// Remove the verification code param
-			return uri.Remove(startIndex, codeLength);
+		public string Name { get { return "Pinterest"; } }
+		public string Description { get { return "Provides user authentication through Pinterest."; } }
+		public void Initialize() 
+		{
+			_http = Apis.Get<IHttp>();
 		}
 
-        /// <summary>
-        /// Gets the access token for the security parameters.  Context will only have AccessToken and Expires values set.
-        /// </summary>
-        /// <param name="securityParams">MUST have "authCode" in the collection.</param>
-        private string GetAccessToken(string authorizationCode)
-        {
-            // Use the authorization code to request an access token.
-            string postData = string.Format("grant_type=authorization_code&client_id={0}&client_secret={1}&code={2}",
-                                        ConsumerKey, ConsumerSecret, authorizationCode);
+		#endregion
 
-            string responseData;
-			using (var webClient = new WebClient())
+		#region IConfigurablePlugin
+
+		public void Update(IPluginConfiguration configuration)
+		{
+			_configuration = configuration;
+		}
+
+		public PropertyGroup[] ConfigurationOptions
+		{
+			get
 			{
-				try
+				var groups = new[] { new PropertyGroup { Id = "options", LabelText = "Options", OrderNumber = 0 } };
+
+				groups[0].Properties.Add(new Property
 				{
-					webClient.Headers[HttpRequestHeader.ContentType] = "application/x-www-form-urlencoded";
-					responseData = webClient.UploadString(AccessTokenUrl, postData);
-				}
-				catch (Exception ex)
+					Id = "RedirectUri",
+					LabelText = "Redirect URI",
+					DescriptionText = "Use this URL when configuring this OAuth client with Pinterest.",
+					DataType = "string",
+					OrderNumber = 0,
+					DefaultValue = _redirectUri,
+					Visible = true,
+					Editable = false
+				});
+
+				groups[0].Properties.Add(new Property
 				{
-					throw new ApplicationException("OAuth Web Request Failed", ex);
-				}
+					Id = CLIENT_ID,
+					LabelText = "Client ID",
+					DataType = "string",
+					OrderNumber = 0,
+					DefaultValue = "",
+					Options = new System.Collections.Specialized.NameValueCollection { { "obscure", "true" } }
+				});
+
+				groups[0].Properties.Add(new Property
+				{
+					Id = CLIENT_SECRET,
+					LabelText = "Client Secret",
+					DataType = "string",
+					OrderNumber = 1,
+					DefaultValue = "",
+					Options = new System.Collections.Specialized.NameValueCollection { { "obscure", "true" } }
+				});
+
+				return groups;
 			}
+		}
 
-            if (responseData.Length > 0)
-            {
-                //Store the returned access_token
-                dynamic accessResponse = new JavaScriptSerializer().DeserializeObject(responseData);
+		#endregion
 
-                if (accessResponse["access_token"] != null)
-                    return accessResponse["access_token"];
-            }
-            return null;
-        }
+		#region IRequiredConfigurationPlugin Members
 
-        private OAuthData GetUserData(string token)
-        {
-            // Use Pinterest API to get details about the user
-            string pinterestUrl = string.Format("https://api.pinterest.com/v1/me?access_token={0}", token);
+		public bool IsConfigured
+		{
+			get { return !string.IsNullOrEmpty(_configuration.GetString(CLIENT_ID)) && !string.IsNullOrEmpty(_configuration.GetString(CLIENT_SECRET)); }
+		}
 
-            string responseData;
-            using (var webClient = new WebClient())
-            {
-                try
-                {
-                    responseData = webClient.DownloadString(pinterestUrl);
-                }
-                catch (Exception ex)
-                {
-                    throw new ApplicationException("OAuth Web Request Failed", ex);
-                }
-            }
+		#endregion
 
-            if (responseData.Length > 0)
-            {
-                //Store the returned access_token
-                PinterestUserDetails userDetails = new JavaScriptSerializer().Deserialize<PinterestUserDetails>(responseData);
+		#region IExternalLinkedAuthenticationProvider
 
-                var data = new OAuthData
-                    {
-                        ClientId = userDetails.data.id, 
-                        ClientType = ClientType, 
-                        UserName = string.Format("{0}{1}", userDetails.data.first_name, userDetails.data.last_name), 
-                        CommonName = string.Format("{0} {1}", userDetails.data.first_name, userDetails.data.last_name)
-                    };
+		public string Id { get; } = "pinterest";
+		public string NameHtml { get; } = "Pinterest";
 
-                return data;
-            }
-            return null;
-        }
+		public Task<string> GetInitializeUrl(ExternalLinkedAuthenticationInitializeOptions options)
+		{
+			return TaskUtility.FromSync<string>(() =>
+			{
+				return $"https://api.pinterest.com/oauth/?client_id={HttpUtility.UrlEncode(_configuration.GetString(CLIENT_ID))}&redirect_uri={HttpUtility.UrlEncode(_redirectUri)}&response_type=code&scope=user_accounts:read&state={HttpUtility.UrlEncode(options.State)}";
+			});
+		}
+		
+		public void SetController(IExternalLinkedAuthenticationProviderController controller)
+		{
+			_authController = controller;
+			_authController.CssColor = () => "#BD081C";
+			_authController.IconUrl = () => "https://developers.pinterest.com/static/img/badge.svg";
+			_authController.PrivacyDetailsHtml = () => "Privacy statement";
+			_redirectUri = _authController.RegisterAndGetCallbackUrl(async (options) =>
+			{
+				if (options.QueryString["error"] != null)
+					throw new Exception($"Login Failed: {options.QueryString["error"]}");
 
-        private class PinterestUserDetails
-        {
-            public PinterestData data;
-        }
+				if (options.QueryString["code"] == null)
+					throw new Exception("Login Failed: No code was received.");
 
-        private class PinterestData
-        {
-            public string url { get; set; }
-            public string first_name { get; set; }
-            public string last_name { get; set; }
-            public string id { get; set; }
-        }
-        #endregion
-    }
+				string authorizationCode = options.QueryString["code"];
+				string state = options.QueryString["state"];
+				string token = await GetAccessToken(authorizationCode, options.Token);
+
+				if (string.IsNullOrEmpty(token))
+					throw new Exception("Login Failed: A token could not be retrieved.");
+
+				_authController.SetLinkedUserData(await GetUserData(token, options.Token), state);
+			});
+		}
+
+		#endregion
+
+		#region Helpers
+
+		private async Task<string> GetAccessToken(string authorizationCode, CancellationToken cancellationToken)
+		{
+			var httpOptions = new HttpOptions
+			{
+				BypassUrlFiltering = true,
+				CancellationToken = cancellationToken
+			};
+			httpOptions.Headers["Content-Type"] = "application/x-www-form-urlencoded";
+			httpOptions.Headers["Authorization"] = "Basic " + System.Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{_configuration.GetString(CLIENT_ID)}:{_configuration.GetString(CLIENT_SECRET)}"));
+
+			var httpResponse = await _http.PostAsync(
+				"https://api.pinterest.com/v5/oauth/token", 
+				$"grant_type=authorization_code&code={HttpUtility.UrlEncode(authorizationCode)}&redirect_uri={HttpUtility.UrlEncode(_redirectUri)}", 
+				httpOptions);
+
+			if (httpResponse.Data != null && httpResponse.Data.access_token != null)
+				return httpResponse.Data.access_token;
+
+			return null;
+		}
+
+		private async Task<ExternalLinkedAuthenticationUserData> GetUserData(string token, CancellationToken cancellationToken)
+		{
+			var httpOptions = new HttpOptions
+			{
+				BypassUrlFiltering = true,
+				CancellationToken = cancellationToken
+			};
+			httpOptions.Headers["Authorization"] = $"Bearer ${token}";
+
+			var httpResponse = await _http.GetAsync(
+				$"https://api.pinterest.com/v5/user_account",
+				httpOptions);
+
+			if (httpResponse.Data != null)
+				return new ExternalLinkedAuthenticationUserData
+				{
+					AvatarUrl = httpResponse.Data.profile_image,
+					ExternalUserId = httpResponse.Data.id,
+					UserName = httpResponse.Data.username
+				};
+
+			return null;
+		}
+
+		#endregion
+	}
 }
